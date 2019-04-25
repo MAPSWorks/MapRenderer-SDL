@@ -211,7 +211,7 @@ static int draw_way (const void *user_data, const readosm_way * way)
 
     Ways.push_back(WayData());
 
-    sprintf (buf, "%lld", way->id);
+    /*sprintf (buf, "%lld", way->id);
 
     printf ("id: %s\n", buf);
 
@@ -222,26 +222,21 @@ static int draw_way (const void *user_data, const readosm_way * way)
         printf ("uid: %d\n", way->uid);
     if (way->timestamp != NULL)
         printf ("timestamp: %s\n", way->timestamp);
-    /*
-    * the Way object may have a noderefs-list and a tag-list
-    * please note: these are variable-length lists, and may
-    * be empty: in this case the corresponding item count
-    * will be ZERO
     */
     if (way->tag_count == 0 && way->node_ref_count == 0){}
     else
     {
         for (i = 0; i < way->node_ref_count; i++)
         {
-            sprintf (buf, "%lld", *(way->node_refs + i));
-            printf ("nodeRef: %s\n", buf);
+            //sprintf (buf, "%lld", *(way->node_refs + i));
+            //printf ("nodeRef: %s\n", buf);
             Ways.back().nodeIDs.push_back(*(way->node_refs + i));
         }
         for (i = 0; i < way->tag_count; i++)
         {
             /* we'll now print each <tag> for this way */
             tag = way->tags + i;
-            printf ("tag: key: %s val:%s\n", tag->key, tag->value);
+            //printf ("tag: key: %s val:%s\n", tag->key, tag->value);
             TagData tagDat;
             tagDat.key = tag->key;
             tagDat.val = tag->value;
@@ -456,6 +451,7 @@ void renderOSM(SDL_Window *window, SDL_Renderer *renderer)
 
 void renderOSM2(SDL_Window *window, SDL_Renderer *renderer)
 {
+    using Point = std::array<double, 2>;
     for (int i = 0; i < Ways.size(); i++)
     {
         SDL_Color polyColor;
@@ -467,7 +463,6 @@ void renderOSM2(SDL_Window *window, SDL_Renderer *renderer)
 
         if (area)
         {
-            using Point = std::array<double, 2>;
             std::vector<std::vector<Point>> polygon;
             polygon.push_back(std::vector<Point>());
             for (int y = 0; y < Ways[i].nodeIDs.size(); y++)
