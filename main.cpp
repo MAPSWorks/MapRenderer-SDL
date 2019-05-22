@@ -26,6 +26,12 @@ struct WayData
     std::vector<TagData> tags;
 };
 
+struct RelationData
+{
+    std::vector<long long> wayIDs;
+    std::vector<TagData> tags;
+};
+
 struct osm_statistics
 {
     double min_longitude;
@@ -35,7 +41,8 @@ struct osm_statistics
 };
 
 std::map<long long, NodeData> Nodes;
-std::vector<WayData> Ways;
+std::map<long long, WayData> Ways;
+std::vector<RelationData> Relations;
 
 static int print_node (const void *user_data, const readosm_node * node)
 {
@@ -209,7 +216,7 @@ static int draw_way (const void *user_data, const readosm_way * way)
     int i;
     const readosm_tag *tag;
 
-    Ways.push_back(WayData());
+    Ways[way->id] = WayData();
 
     /*sprintf (buf, "%lld", way->id);
 
@@ -230,7 +237,7 @@ static int draw_way (const void *user_data, const readosm_way * way)
         {
             //sprintf (buf, "%lld", *(way->node_refs + i));
             //printf ("nodeRef: %s\n", buf);
-            Ways.back().nodeIDs.push_back(*(way->node_refs + i));
+            Ways[way->id].nodeIDs.push_back(*(way->node_refs + i));
         }
         for (i = 0; i < way->tag_count; i++)
         {
@@ -240,7 +247,7 @@ static int draw_way (const void *user_data, const readosm_way * way)
             TagData tagDat;
             tagDat.key = tag->key;
             tagDat.val = tag->value;
-            Ways.back().tags.push_back(tagDat);
+            Ways[way->id].tags.push_back(tagDat);
         }
     }
     return READOSM_OK;
@@ -344,6 +351,46 @@ static int print_relation (const void *user_data, const readosm_relation * relat
 
 static int draw_relation (const void *user_data, const readosm_relation * relation)
 {
+    const readosm_member *member;
+    const readosm_tag *tag;
+
+    RelationData relDat;
+
+    if (relation->tag_count == 0 && relation->member_count == 0){}
+    else
+      {
+          for (int i = 0; i < relation->member_count; i++)
+            {
+                /* we'll now print each <member> for this way */
+                member = relation->members + i;
+                switch (member->member_type)
+                  {
+                  case READOSM_MEMBER_NODE:
+                      //printf ("\t\t<member type=\"node\" ref=\"%s\"", buf);
+                      break;
+                  case READOSM_MEMBER_WAY:
+                      //printf ("\t\t<member type=\"way\" ref=\"%s\"", buf);
+                      relDat.wayIDs.push_back( member->id );
+                      break;
+                  case READOSM_MEMBER_RELATION:
+                      //printf ("\t\t<member type=\"relation\" ref=\"%s\"", buf);
+                      break;
+                  default:
+                      //printf ("\t\t<member ref=\"%s\"", buf);
+                      break;
+                  };
+            }
+          for (int i = 0; i < relation->tag_count; i++)
+            {
+                /* we'll now print each <tag> for this way */
+                tag = relation->tags + i;
+                TagData tagDat;
+                tagDat.key = tag->key;
+                tagDat.val = tag->value;
+                relDat.tags.push_back(tagDat);
+            }
+      }
+    Relations.push_back(relDat);
     return READOSM_OK;
 }
 
@@ -357,7 +404,7 @@ int loadOSM()
     infos.max_longitude = -180.0;
     infos.min_latitude = 90.0;
     infos.max_latitude = -90.0;
-    ret = readosm_open ("/home/tim/Downloads/map(1).osm", &osm_handle);
+    ret = readosm_open ("/home/tim/Downloads/map(3).osm", &osm_handle);
     if (ret != READOSM_OK)
     {
       fprintf (stderr, "OPEN error: %d\n", ret);
@@ -381,7 +428,7 @@ double map(double x, double in_min, double in_max, double out_min, double out_ma
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-void setColorByTag(SDL_Color &color, bool &area, std::string key, std::string value)
+void setStyleByTag(SDL_Color &color, bool &area, int &renderThiccness, std::string key, std::string value)
 {
     if (key == "highway")
     {
@@ -391,6 +438,15 @@ void setColorByTag(SDL_Color &color, bool &area, std::string key, std::string va
             color.g = 255;
             color.b = 0;
             color.a = 255;
+            renderThiccness = 1;
+        }
+        if (value == "residential")
+        {
+            color.r = 255;
+            color.g = 255;
+            color.b = 255;
+            color.a = 255;
+            renderThiccness = 4;
         }
         if (value == "tertiary")
         {
@@ -398,24 +454,45 @@ void setColorByTag(SDL_Color &color, bool &area, std::string key, std::string va
             color.g = 255;
             color.b = 255;
             color.a = 255;
+            renderThiccness = 5;
+        }
+        if (value == "primary")
+        {
+            color.r = 244;
+            color.g = 202;
+            color.b = 95;
+            color.a = 255;
+            renderThiccness = 4;
+        }
+        if (value == "motorway")
+        {
+            color.r = 234;
+            color.g = 75;
+            color.b = 122;
+            color.a = 255;
+            renderThiccness = 5;
         }
     }
-    if (value == "grass")
+    if (key == "landuse")
     {
-        color.r = 0;
-        color.g = 255;
-        color.b = 0;
-        color.a = 255;
-        area = true;
+        if (value == "grass")
+        {
+            color.r = 0;
+            color.g = 255;
+            color.b = 0;
+            color.a = 255;
+            area = true;
+        }
+        if (value == "forest")
+        {
+            color.r = 63;
+            color.g = 135;
+            color.b = 65;
+            color.a = 255;
+            area = true;
+        }
     }
-    if (value == "forest")
-    {
-        color.r = 63;
-        color.g = 135;
-        color.b = 65;
-        color.a = 255;
-        area = true;
-    }
+    //renderThiccness-=1;
 }
 
 void renderOSM(SDL_Window *window, SDL_Renderer *renderer)
@@ -449,27 +526,28 @@ void renderOSM(SDL_Window *window, SDL_Renderer *renderer)
     }
 }
 
-void renderOSM2(SDL_Window *window, SDL_Renderer *renderer)
+void renderOSM2(SDL_Window *window, SDL_Renderer *renderer, int xpan, int ypan, float scale)
 {
     using Point = std::array<double, 2>;
-    for (int i = 0; i < Ways.size(); i++)
+    for (auto x : Ways)
     {
         SDL_Color polyColor;
         bool area = false;
-        for (int y = 0; y < Ways[i].tags.size(); y++)
+        int renderThickness = 1;
+        for (int y = 0; y < x.second.tags.size(); y++)
         {
-            setColorByTag(polyColor, area, Ways[i].tags[y].key, Ways[i].tags[y].val);
+            setStyleByTag(polyColor, area, renderThickness, x.second.tags[y].key, x.second.tags[y].val);
         }
 
         if (area)
         {
             std::vector<std::vector<Point>> polygon;
             polygon.push_back(std::vector<Point>());
-            for (int y = 0; y < Ways[i].nodeIDs.size(); y++)
+            for (int y = 0; y < x.second.nodeIDs.size(); y++)
             {
                 Point pt;
-                pt[0] = map(Nodes[ Ways[i].nodeIDs[y] ].lon, infos.min_longitude, infos.max_longitude, 0, 800);
-                pt[1] = map(Nodes[ Ways[i].nodeIDs[y] ].lat, infos.min_latitude, infos.max_latitude, 800, 0);
+                pt[0] = map(Nodes[ x.second.nodeIDs[y] ].lon, infos.min_longitude, infos.max_longitude, (scale-1)*-800, scale*800)+xpan;
+                pt[1] = map(Nodes[ x.second.nodeIDs[y] ].lat, infos.min_latitude, infos.max_latitude, scale*800, (scale-1)*-800)+ypan;
                 polygon.back().push_back(pt);
             }
             std::vector<int> indices = mapbox::earcut<int>(polygon);
@@ -480,27 +558,130 @@ void renderOSM2(SDL_Window *window, SDL_Renderer *renderer)
         }
         else
         {
-            SDL_SetRenderDrawColor(renderer, polyColor.r, polyColor.g, polyColor.b, polyColor.a);
+            //SDL_SetRenderDrawColor(renderer, polyColor.r, polyColor.g, polyColor.b, polyColor.a);
 
-            for (int y = 1; y < Ways[i].nodeIDs.size(); y++)
+            for (int y = 1; y < x.second.nodeIDs.size(); y++)
             {
-                SDL_RenderDrawLine(renderer,
+                /*SDL_RenderDrawLine(renderer,
                                    map(Nodes[ Ways[i].nodeIDs[y] ].lon, infos.min_longitude, infos.max_longitude, 0, 800),
                                    map(Nodes[ Ways[i].nodeIDs[y] ].lat, infos.min_latitude, infos.max_latitude, 800, 0),
 
                                    map(Nodes[ Ways[i].nodeIDs[y-1] ].lon, infos.min_longitude, infos.max_longitude, 0, 800),
-                                   map(Nodes[ Ways[i].nodeIDs[y-1] ].lat, infos.min_latitude, infos.max_latitude, 800, 0) );
+                                   map(Nodes[ Ways[i].nodeIDs[y-1] ].lat, infos.min_latitude, infos.max_latitude, 800, 0) );*/
+                thickLineRGBA(renderer,
+                                map(Nodes[ x.second.nodeIDs[y] ].lon, infos.min_longitude, infos.max_longitude, (scale-1)*-800, scale*800)+xpan,
+                                map(Nodes[ x.second.nodeIDs[y] ].lat, infos.min_latitude, infos.max_latitude, scale*800, (scale-1)*-800)+ypan,
+
+                                map(Nodes[ x.second.nodeIDs[y-1] ].lon, infos.min_longitude, infos.max_longitude, (scale-1)*-800, scale*800)+xpan,
+                                map(Nodes[ x.second.nodeIDs[y-1] ].lat, infos.min_latitude, infos.max_latitude, scale*800, (scale-1)*-800)+ypan,
+                                (1),
+                                polyColor.r, polyColor.g, polyColor.b, polyColor.a);
             }
         }
     }
 
-    for (auto x : Nodes)
+    /*for (auto x : Nodes)
     {
         SDL_SetRenderDrawColor(renderer, 255, 0, 0, SDL_ALPHA_OPAQUE);
         SDL_RenderDrawPoint(renderer,
                             map(x.second.lon, infos.min_longitude, infos.max_longitude, 0, 800),
                             map(x.second.lat, infos.min_latitude, infos.max_latitude, 800, 0) );
+    }*/
+}
+
+void renderOSM3(SDL_Window *window, SDL_Renderer *renderer)
+{
+    using Point = std::array<double, 2>;
+    for (auto y : Relations)
+    {
+        for (int i = 0; i < y.wayIDs.size(); i++)
+        {
+            auto x = Ways[y.wayIDs[i]];
+            SDL_Color polyColor;
+            bool area = false;
+            int renderThickness = 1;
+            for (int yy = 0; yy < x.tags.size(); yy++)
+            {
+                setStyleByTag(polyColor, area, renderThickness, x.tags[yy].key, x.tags[yy].val);
+            }
+
+            if (area)
+            {
+                std::vector<std::vector<Point>> polygon;
+                polygon.push_back(std::vector<Point>());
+                for (int yy = 0; yy < x.nodeIDs.size(); yy++)
+                {
+                    Point pt;
+                    pt[0] = map(Nodes[ x.nodeIDs[yy] ].lon, infos.min_longitude, infos.max_longitude, 0, 800);
+                    pt[1] = map(Nodes[ x.nodeIDs[yy] ].lat, infos.min_latitude, infos.max_latitude, 800, 0);
+                    polygon.back().push_back(pt);
+                }
+                std::vector<int> indices = mapbox::earcut<int>(polygon);
+                for (int yy = 0; yy < indices.size(); yy+=3)
+                {
+                    filledTrigonRGBA(renderer, polygon.back()[indices[yy]][0], polygon.back()[indices[yy]][1] , polygon.back()[indices[yy+1]][0], polygon.back()[indices[yy+1]][1], polygon.back()[indices[yy+2]][0], polygon.back()[indices[yy+2]][1], polyColor.r, polyColor.g, polyColor.b, polyColor.a);
+                }
+            }
+            else
+            {
+                for (int yy = 1; yy < x.nodeIDs.size(); yy++)
+                {
+                    thickLineRGBA(renderer,
+                                    map(Nodes[ x.nodeIDs[yy] ].lon, infos.min_longitude, infos.max_longitude, 0, 800),
+                                    map(Nodes[ x.nodeIDs[yy] ].lat, infos.min_latitude, infos.max_latitude, 800, 0),
+
+                                    map(Nodes[ x.nodeIDs[yy-1] ].lon, infos.min_longitude, infos.max_longitude, 0, 800),
+                                    map(Nodes[ x.nodeIDs[yy-1] ].lat, infos.min_latitude, infos.max_latitude, 800, 0),
+                                    renderThickness,
+                                    polyColor.r, polyColor.g, polyColor.b, polyColor.a);
+                }
+            }
+        }
     }
+    /*for (auto x : Ways)
+    {
+        SDL_Color polyColor;
+        bool area = false;
+        int renderThickness = 1;
+        for (int y = 0; y < x.second.tags.size(); y++)
+        {
+            setStyleByTag(polyColor, area, renderThickness, x.second.tags[y].key, x.second.tags[y].val);
+        }
+
+        if (area)
+        {
+            std::vector<std::vector<Point>> polygon;
+            polygon.push_back(std::vector<Point>());
+            for (int y = 0; y < x.second.nodeIDs.size(); y++)
+            {
+                Point pt;
+                pt[0] = map(Nodes[ x.second.nodeIDs[y] ].lon, infos.min_longitude, infos.max_longitude, 0, 800);
+                pt[1] = map(Nodes[ x.second.nodeIDs[y] ].lat, infos.min_latitude, infos.max_latitude, 800, 0);
+                polygon.back().push_back(pt);
+            }
+            std::vector<int> indices = mapbox::earcut<int>(polygon);
+            for (int y = 0; y < indices.size(); y+=3)
+            {
+                filledTrigonRGBA(renderer, polygon.back()[indices[y]][0], polygon.back()[indices[y]][1] , polygon.back()[indices[y+1]][0], polygon.back()[indices[y+1]][1], polygon.back()[indices[y+2]][0], polygon.back()[indices[y+2]][1], polyColor.r, polyColor.g, polyColor.b, polyColor.a);
+            }
+        }
+        else
+        {
+            //SDL_SetRenderDrawColor(renderer, polyColor.r, polyColor.g, polyColor.b, polyColor.a);
+
+            for (int y = 1; y < x.second.nodeIDs.size(); y++)
+            {
+                thickLineRGBA(renderer,
+                                map(Nodes[ x.second.nodeIDs[y] ].lon, infos.min_longitude, infos.max_longitude, 0, 800),
+                                map(Nodes[ x.second.nodeIDs[y] ].lat, infos.min_latitude, infos.max_latitude, 800, 0),
+
+                                map(Nodes[ x.second.nodeIDs[y-1] ].lon, infos.min_longitude, infos.max_longitude, 0, 800),
+                                map(Nodes[ x.second.nodeIDs[y-1] ].lat, infos.min_latitude, infos.max_latitude, 800, 0),
+                                renderThickness,
+                                polyColor.r, polyColor.g, polyColor.b, polyColor.a);
+            }
+        }
+    }*/
 }
 
 int main(int argc, char* argv[])
@@ -508,6 +689,12 @@ int main(int argc, char* argv[])
     if (SDL_Init(SDL_INIT_VIDEO) == 0) {
         SDL_Window* window = NULL;
         SDL_Renderer* renderer = NULL;
+
+        int xpan = 0;
+        int ypan = 0;
+        int prevX = 100;
+        int prevY = 100;
+        float scale = 1;
 
         if (SDL_CreateWindowAndRenderer(800, 800, 0, &window, &renderer) == 0) {
             SDL_bool done = SDL_FALSE;
@@ -519,13 +706,31 @@ int main(int argc, char* argv[])
                 SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
                 SDL_RenderClear(renderer);
 
-                renderOSM2(window, renderer);
+                renderOSM2(window, renderer, float(xpan)*scale, float(ypan)*scale, scale);
+
+                int mx;
+                int my;
+                if (SDL_GetMouseState(&mx, &my) & SDL_BUTTON(SDL_BUTTON_LEFT))
+                {
+                    xpan += (mx-prevX)/scale;
+                    ypan += (my-prevY)/scale;
+                    prevX = mx;
+                    prevY = my;
+                }
+                else {
+                    prevX = mx;
+                    prevY = my;
+                }
 
                 SDL_RenderPresent(renderer);
 
                 while (SDL_PollEvent(&event)) {
                     if (event.type == SDL_QUIT) {
                         done = SDL_TRUE;
+                    }
+                    if (event.type == SDL_MOUSEWHEEL)
+                    {
+                        scale += (float(event.wheel.y)/10.0f);
                     }
                 }
             }
